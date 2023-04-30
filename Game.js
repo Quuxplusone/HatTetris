@@ -62,8 +62,8 @@ var z = { size: 3, blocks: [0x0C60, 0x4C80, 0xC600, 0x2640], color: 'red'    };
 // occupied block (x,y) for a given piece
 //------------------------------------------------
 function eachblock(type, x, y, dir, fn) {
-  var bit, result, row = 0, col = 0, blocks = type.blocks[dir];
-  for(bit = 0x8000 ; bit > 0 ; bit = bit >> 1) {
+  var result, row = 0, col = 0, blocks = type.blocks[dir];
+  for (let bit = 0x8000 ; bit > 0 ; bit = bit >> 1) {
     if (blocks & bit) {
       fn(x + col, y + row);
     }
@@ -78,7 +78,7 @@ function eachblock(type, x, y, dir, fn) {
 // check if a piece can fit into a position in the grid
 //-----------------------------------------------------
 function occupied(type, x, y, dir) {
-  var result = false
+  var result = false;
   eachblock(type, x, y, dir, function(x, y) {
     if ((x < 0) || (x >= nx) || (y < 0) || (y >= ny) || getBlock(x,y))
       result = true;
@@ -96,8 +96,9 @@ function unoccupied(type, x, y, dir) {
 //-----------------------------------------
 var pieces = [];
 function randomPiece() {
-  if (pieces.length == 0)
+  if (pieces.length == 0) {
     pieces = [i,i,i,i,j,j,j,j,l,l,l,l,o,o,o,o,s,s,s,s,t,t,t,t,z,z,z,z];
+  }
   var type = pieces.splice(random(0, pieces.length-1), 1)[0];
   return { type: type, dir: DIR.UP, x: Math.round(random(0, nx - type.size)), y: 0 };
 }
@@ -196,8 +197,9 @@ function handle(action) {
 }
 
 function move(dir) {
-  var x = current.x, y = current.y;
-  switch(dir) {
+  let x = current.x;
+  let y = current.y;
+  switch (dir) {
     case DIR.RIGHT: x = x + 1; break;
     case DIR.LEFT:  x = x - 1; break;
     case DIR.DOWN:  y = y + 1; break;
@@ -207,14 +209,13 @@ function move(dir) {
     current.y = y;
     invalidate();
     return true;
-  }
-  else {
+  } else {
     return false;
   }
 }
 
 function rotate() {
-  var newdir = (current.dir == DIR.MAX ? DIR.MIN : current.dir + 1);
+  let newdir = (current.dir == DIR.MAX ? DIR.MIN : current.dir + 1);
   if (unoccupied(current.type, current.x, current.y, newdir)) {
     current.dir = newdir;
     invalidate();
@@ -242,10 +243,10 @@ function dropPiece() {
 }
 
 function removeLines() {
-  var x, y, complete, n = 0;
-  for(y = ny ; y > 0 ; --y) {
-    complete = true;
-    for(x = 0 ; x < nx ; ++x) {
+  let n = 0;
+  for (let y = ny ; y > 0 ; --y) {
+    let complete = true;
+    for (let x = 0 ; x < nx ; ++x) {
       if (!getBlock(x, y))
         complete = false;
     }
@@ -262,9 +263,8 @@ function removeLines() {
 }
 
 function removeLine(n) {
-  var x, y;
-  for(y = n ; y >= 0 ; --y) {
-    for(x = 0 ; x < nx ; ++x)
+  for (let y = n ; y >= 0 ; --y) {
+    for (let x = 0 ; x < nx ; ++x)
       setBlock(x, y, (y == 0) ? null : getBlock(x, y-1));
   }
 }
@@ -296,11 +296,12 @@ function drawCourt() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (playing)
       drawPiece(ctx, current.type, current.x, current.y, current.dir);
-    var x, y, block;
-    for(y = 0 ; y < ny ; y++) {
-      for (x = 0 ; x < nx ; x++) {
-        if (block = getBlock(x,y))
+    for (let y = 0 ; y < ny ; y++) {
+      for (let x = 0 ; x < nx ; x++) {
+        let block = getBlock(x,y);
+        if (block) {
           drawBlock(ctx, x, y, block.color);
+        }
       }
     }
     ctx.strokeRect(0, 0, nx*dx - 1, ny*dy - 1); // court boundary
@@ -310,7 +311,7 @@ function drawCourt() {
 
 function drawNext() {
   if (invalid.next) {
-    var padding = (nu - next.type.size) / 2; // half-arsed attempt at centering next piece display
+    let padding = (nu - next.type.size) / 2; // half-arsed attempt at centering next piece display
     uctx.save();
     uctx.translate(0.5, 0.5);
     uctx.clearRect(0, 0, nu*dx, nu*dy);
