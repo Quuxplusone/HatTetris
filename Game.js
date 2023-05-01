@@ -128,11 +128,11 @@ function keydown(ev) {
   var handled = false;
   if (playing) {
     switch(ev.keyCode) {
-      case KEY.LEFT:   actions.push(DIR.LEFT);  handled = true; break;
-      case KEY.RIGHT:  actions.push(DIR.RIGHT); handled = true; break;
-      case KEY.UP:     actions.push(DIR.UP);    handled = true; break;
-      case KEY.DOWN:   actions.push(DIR.DOWN);  handled = true; break;
-      case KEY.ESC:    lose();                  handled = true; break;
+      case KEY.LEFT:   actions.push('left');   handled = true; break;
+      case KEY.RIGHT:  actions.push('right');  handled = true; break;
+      case KEY.UP:     actions.push('rotate'); handled = true; break;
+      case KEY.DOWN:   actions.push('drop');   handled = true; break;
+      case KEY.ESC:    lose();                 handled = true; break;
     }
   } else if (ev.keyCode == KEY.SPACE) {
     play();
@@ -176,8 +176,9 @@ function reset() {
 
 function update(idt) {
   if (playing) {
-    if (vscore < score)
+    if (vscore < score) {
       setVisualScore(vscore + 1);
+    }
     handle(actions.shift());
     dt = dt + idt;
     if (dt > step) {
@@ -188,22 +189,20 @@ function update(idt) {
 }
 
 function handle(action) {
-  switch(action) {
-    case DIR.LEFT:  move(DIR.LEFT);  break;
-    case DIR.RIGHT: move(DIR.RIGHT); break;
-    case DIR.UP:    rotate();        break;
-    case DIR.DOWN:  drop();          break;
+  if (action == 'left') {
+    move(-1, 0);
+  } else if (action == 'right') {
+    move(+1, 0);
+  } else if (action == 'drop') {
+    drop();
+  } else if (action == 'rotate') {
+    rotate();
   }
 }
 
-function move(dir) {
-  let x = current.x;
-  let y = current.y;
-  switch (dir) {
-    case DIR.RIGHT: x = x + 1; break;
-    case DIR.LEFT:  x = x - 1; break;
-    case DIR.DOWN:  y = y + 1; break;
-  }
+function move(dx, dy) {
+  let x = current.x + dx;
+  let y = current.y + dy;
   if (unoccupied(current.type, x, y, current.dir)) {
     current.x = x;
     current.y = y;
@@ -223,7 +222,7 @@ function rotate() {
 }
 
 function drop() {
-  if (!move(DIR.DOWN)) {
+  if (!move(0, +1)) {
     addScore(10);
     dropPiece();
     removeLines();
