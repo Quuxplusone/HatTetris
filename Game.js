@@ -7,14 +7,13 @@ function random(min, max)      { return (min + (Math.random() * (max - min)));  
 function randomChoice(choices) { return choices[Math.round(random(0, choices.length-1))]; }
 
 let KEY     = { ESC: 27, SPACE: 32, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40 };
-let DIR     = { UP: 0, RIGHT: 1, DOWN: 2, LEFT: 3, MIN: 0, MAX: 3 };
 let canvas  = null;
 let ctx     = null;
 let ucanvas = null;
 let uctx    = null;
 let speed   = { start: 0.6, decrement: 0.005, min: 0.1 }; // how long before piece drops by 1 row (seconds)
 let nx      = 10; // width of tetris court (in blocks)
-let ny      = 20; // height of tetris court (in blocks)
+let ny      = 40; // height of tetris court (in blocks)
 let nu      = 5;  // width/height of upcoming preview (in blocks)
 
 //-------------------------------------------------------------------------
@@ -36,6 +35,17 @@ var dx, dy,        // pixel size of a single tetris block
 //-------------------------------------------------------------------------
 // tetris pieces
 //
+// blocks: each element represents one of the six rotations of the piece (0, 2, 4, 6, 8, 10 o'clock)
+//         as a 15-bit integer where the 15 bits represent the 15 kites that could
+//         possibly be part of this hat. The three kites in a triangular cell are numbered
+//         0,1,2 vertically downward; triangles are numbered in (x,y) order.
+// For example, the default 0-o'clock shirt (centered on a right-facing triangle)
+// hits these kites: 2, 8,9,10, 11,12, 7,14.
+// When you shift the piece left or right, it is briefly 0.5 steps out of phase,
+// and therefore will step down only 0.5 steps the next time it moves down.
+//
+//
+//
 // blocks: each element represents a rotation of the piece (0, 90, 180, 270)
 //         each element is a 16 bit integer where the 16 bits represent
 //         a 4x4 set of blocks, e.g. j.blocks[0] = 0x44C0
@@ -49,27 +59,16 @@ var dx, dy,        // pixel size of a single tetris block
 //
 //-------------------------------------------------------------------------
 
-var i = { size: 4, blocks: [0x0F00, 0x2222, 0x00F0, 0x4444], color: 'cyan'   };
-var j = { size: 3, blocks: [0x44C0, 0x8E00, 0x6440, 0x0E20], color: 'blue'   };
-var l = { size: 3, blocks: [0x4460, 0x0E80, 0xC440, 0x2E00], color: 'orange' };
-var o = { size: 2, blocks: [0xCC00, 0xCC00, 0xCC00, 0xCC00], color: 'yellow' };
-var s = { size: 3, blocks: [0x06C0, 0x8C40, 0x6C00, 0x4620], color: 'green'  };
-var t = { size: 3, blocks: [0x0E40, 0x4C40, 0x4E00, 0x4640], color: 'purple' };
-var z = { size: 3, blocks: [0x0C60, 0x4C80, 0xC600, 0x2640], color: 'red'    };
-
 //------------------------------------------------
 // do the bit manipulation and iterate through each
 // occupied block (x,y) for a given piece
 //------------------------------------------------
-function eachblock(type, x, y, dir, fn) {
-  var result, row = 0, col = 0, blocks = type.blocks[dir];
-  for (let bit = 0x8000 ; bit > 0 ; bit = bit >> 1) {
-    if (blocks & bit) {
-      fn(x + col, y + row);
-    }
-    if (++col === 4) {
-      col = 0;
-      ++row;
+function eachblock(blocks, x, y, fn) {
+  for (let row = 0; row < 5; ++row) {
+    for (let col = 0; col < 5; ++col) {
+      if (blocks[5*row + col] !== '.') {
+        fn(x + col, y + row);
+      }
     }
   }
 }
@@ -78,10 +77,11 @@ function eachblock(type, x, y, dir, fn) {
 // check if a piece can fit into a position in the grid
 //-----------------------------------------------------
 function occupied(type, x, y, dir) {
-  var result = false;
-  eachblock(type, x, y, dir, function(x, y) {
-    if ((x < 0) || (x >= nx) || (y < 0) || (y >= ny) || getBlock(x,y))
+  let result = false;
+  eachblock(type.blocks[dir], x, y, function(x, y) {
+    if ((x < 0) || (x >= nx) || (y < 0) || (y >= ny) || getBlock(x,y)) {
       result = true;
+    }
   });
   return result;
 }
@@ -94,13 +94,61 @@ function unoccupied(type, x, y, dir) {
 // start with 4 instances of each piece and
 // pick randomly until the 'bag is empty'
 //-----------------------------------------
+
 var pieces = [];
 function randomPiece() {
   if (pieces.length == 0) {
-    pieces = [i,i,i,i,j,j,j,j,l,l,l,l,o,o,o,o,s,s,s,s,t,t,t,t,z,z,z,z];
+    let i = { size: 4, color: 'cyan', blocks: [
+        '...X....X....X....X....X.',
+        '.XX....XX....X...........',
+        '........XX..XX...X.......',
+        '...X....X....X....X....X.',
+        '.......X....XX....XX.....',
+        '.........X...XX..XX......',
+    ]};
+    let j = { size: 4, color: 'blue', blocks: [
+        '..X....X....X...XX.......',
+        '..X....XX....X....X......',
+        '......XX..XXX............',
+        '.......XX...X....X....X..',
+        '......X....X....XX....X..',
+        '............XXX..XX......',
+    ]};
+    let l = { size: 4, color: 'orange', blocks: [
+        '...X....X....X....XX.....',
+        '.................XXX...XX',
+        '.........X....X...XX...X.',
+        '.......XX....X....X....X.',
+        '............XX...XXX.....',
+        '...X...XX...X....X.......',
+    ]};
+    let o = { size: 2, color: 'yellow', blocks: [
+        '.......X....XX...X.......',
+        '.......X...XX....X.......',
+        '.......X....XX...X.......',
+        '.......X...XX....X.......',
+        '.......X....XX...X.......',
+        '.......X...XX....X.......',
+    ]};
+    let s = { size: 4, blocks: [], color: 'green' };
+    let t = { size: 4, color: 'purple', blocks: [
+        '......XX....X....X....X..',
+        '........X....X...XX...X..',
+        '......XXX...XX...........',
+        '..X....X....X....XX......',
+        '..X...XX...X....X........',
+        '.XX...XXX................',
+    ]};
+    let z = { size: 2, blocks: [0x0660, 0x0446, 0x6440, 0x0660, 0x6220, 0x0226], color: 'red' };
+
+    pieces = [i,i,i,j,j,j,l,l,l,o,o,o];
   }
-  var type = pieces.splice(random(0, pieces.length-1), 1)[0];
-  return { type: type, dir: DIR.UP, x: Math.round(random(0, nx - type.size)), y: 0 };
+  let type = pieces.splice(random(0, pieces.length-1), 1)[0];
+  let x = 2;
+  if (x % 2 == 1) {
+    x += 1;
+  }
+  return { type: type, dir: 0, x: x, y: 0, halfstep: false };
 }
 
 
@@ -161,8 +209,8 @@ function getBlock(x,y)          { return (blocks && blocks[x] ? blocks[x][y] : n
 function setBlock(x,y,type)     { blocks[x] = blocks[x] || []; blocks[x][y] = type; invalidate(); }
 function clearBlocks()          { blocks = []; invalidate(); }
 function clearActions()         { actions = []; }
-function setCurrentPiece(piece) { current = piece || randomPiece(); invalidate();     }
-function setNextPiece(piece)    { next    = piece || randomPiece(); invalidateNext(); }
+function setCurrentPiece(piece) { current = piece; invalidate(); }
+function setNextPiece(piece)    { next = piece; invalidateNext(); }
 
 function reset() {
   dt = 0;
@@ -171,7 +219,7 @@ function reset() {
   clearRows();
   clearScore();
   setCurrentPiece(next);
-  setNextPiece();
+  setNextPiece(randomPiece());
 }
 
 function update(idt) {
@@ -189,10 +237,46 @@ function update(idt) {
 }
 
 function handle(action) {
+  let x = current.x;
+  let y = current.y;
   if (action == 'left') {
-    move(-1, 0);
+    if (current.halfstep) {
+      if (unoccupied(current.type, x-1, y, current.dir)) {
+        current.x -= 1;
+        current.halfstep = false;
+      }
+    } else {
+      if (occupied(current.type, x-1, y+1, current.dir)) {
+        // can't move left at all
+      } else if (unoccupied(current.type, x-1, y-1, current.dir)) {
+        // plenty of room; go left and halfstep
+        current.x -= 1;
+        current.halfstep = true;
+      } else {
+        // go left and down
+        current.x -= 1;
+        current.y += 1;
+      }
+    }
   } else if (action == 'right') {
-    move(+1, 0);
+    if (current.halfstep) {
+      if (unoccupied(current.type, x+1, y, current.dir)) {
+        current.x += 1;
+        current.halfstep = false;
+      }
+    } else {
+      if (occupied(current.type, x+1, y+1, current.dir)) {
+        // can't move right at all
+      } else if (unoccupied(current.type, x+1, y-1, current.dir)) {
+        // plenty of room; go right and halfstep
+        current.x += 1;
+        current.halfstep = true;
+      } else {
+        // go right and down
+        current.x += 1;
+        current.y += 1;
+      }
+    }
   } else if (action == 'drop') {
     drop();
   } else if (action == 'rotate') {
@@ -200,31 +284,28 @@ function handle(action) {
   }
 }
 
-function move(dx, dy) {
-  let x = current.x + dx;
-  let y = current.y + dy;
-  if (unoccupied(current.type, x, y, current.dir)) {
-    current.x = x;
-    current.y = y;
-    invalidate();
-    return true;
-  } else {
-    return false;
-  }
-}
-
 function rotate() {
-  let newdir = (current.dir == DIR.MAX ? DIR.MIN : current.dir + 1);
-  if (unoccupied(current.type, current.x, current.y, newdir)) {
+  let newdir = (current.dir + 1) % 6;
+  if (unoccupied(current.type, current.x, current.y + !current.halfstep, newdir)) {
     current.dir = newdir;
+    current.halfstep = !current.halfstep;
     invalidate();
   }
 }
 
 function drop() {
-  if (!move(0, +1)) {
+  if (unoccupied(current.type, current.x, current.y + 2 - current.halfstep, current.dir)) {
+    // The piece moves down.
+    current.y += 2 - current.halfstep;
+    current.halfstep = false;
+    invalidate();
+  } else {
+    // The piece has landed.
+    console.assert(!current.halfstep);
     addScore(10);
-    dropPiece();
+    eachblock(current.type.blocks[current.dir], current.x, current.y, function(x, y) {
+      setBlock(x, y, current.type);
+    });
     removeLines();
     setCurrentPiece(next);
     setNextPiece(randomPiece());
@@ -233,12 +314,6 @@ function drop() {
       lose();
     }
   }
-}
-
-function dropPiece() {
-  eachblock(current.type, current.x, current.y, current.dir, function(x, y) {
-    setBlock(x, y, current.type);
-  });
 }
 
 function removeLines() {
@@ -292,14 +367,17 @@ function draw() {
 
 function drawCourt() {
   if (invalid.court) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (playing)
-      drawPiece(ctx, current.type, current.x, current.y, current.dir);
-    for (let y = 0 ; y < ny ; y++) {
-      for (let x = 0 ; x < nx ; x++) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    // Draw the bottom edge of the playing field.
+    drawCourtBottom(ctx, 'gray');
+    if (playing) {
+      drawPiece(ctx, current);
+    }
+    for (let y = 0; y < ny; ++y) {
+      for (let x = 0; x < nx; ++x) {
         let block = getBlock(x,y);
         if (block) {
-          drawBlock(ctx, x, y, block.color);
+          drawTrig(ctx, x, y, block.color, false);
         }
       }
     }
@@ -310,14 +388,8 @@ function drawCourt() {
 
 function drawNext() {
   if (invalid.next) {
-    let padding = (nu - next.type.size) / 2; // half-arsed attempt at centering next piece display
-    uctx.save();
-    uctx.translate(0.5, 0.5);
-    uctx.clearRect(0, 0, nu*dx, nu*dy);
-    drawPiece(uctx, next.type, padding, padding, next.dir);
-    uctx.strokeStyle = 'black';
-    uctx.strokeRect(0, 0, nu*dx - 1, nu*dy - 1);
-    uctx.restore();
+    uctx.clearRect(0, 0, uctx.canvas.width, uctx.canvas.height);
+    drawPiece(uctx, { type: next.type, x: 0, y: 0, dir: 0, halfstep: false });
     invalid.next = false;
   }
 }
@@ -336,14 +408,40 @@ function drawRows() {
   }
 }
 
-function drawPiece(ctx, type, x, y, dir) {
-  eachblock(type, x, y, dir, function(x, y) {
-    drawBlock(ctx, x, y, type.color);
+function drawPiece(ctx, p) {
+  eachblock(p.type.blocks[p.dir], p.x, p.y, function(x, y) {
+    drawTrig(ctx, x, y, p.type.color, p.halfstep);
   });
 }
 
-function drawBlock(ctx, x, y, color) {
+function drawTrig(ctx, x, y, color, halfstep) {
   ctx.fillStyle = color;
-  ctx.fillRect(x*dx, y*dy, dx, dy);
-  ctx.strokeRect(x*dx, y*dy, dx, dy)
+  ctx.beginPath();
+  if ((y + halfstep) % 2 == x % 2) {
+    // draw a left-pointing triangle
+    ctx.moveTo(x*dx, y*dy);
+    ctx.lineTo(x*dx + dx, y*dy + dy);
+    ctx.lineTo(x*dx + dx, y*dy - dy);
+  } else {
+    // draw a right-pointing triangle
+    ctx.moveTo(x*dx + dx, y*dy);
+    ctx.lineTo(x*dx, y*dy + dy);
+    ctx.lineTo(x*dx, y*dy - dy);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+}
+
+function drawCourtBottom(ctx, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, ny*dy);
+  for (let x = 1; x < nx; ++x) {
+    ctx.lineTo(x*dx, ny*dy - (x % 2) * dy);
+  }
+  ctx.lineTo(nx*dx, ny*dy);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
 }
