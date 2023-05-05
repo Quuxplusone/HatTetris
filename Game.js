@@ -20,17 +20,19 @@ let nu      = 5;  // width/height of upcoming preview (in blocks)
 // game variables (initialized during reset)
 //-------------------------------------------------------------------------
 
-var dx, dy,        // pixel size of a single tetris block
-    blocks,        // 2 dimensional array (nx*ny) representing tetris court - either empty block or occupied by a 'piece'
-    actions,       // queue of user actions (inputs)
-    playing,       // true|false - game is in progress
-    dt,            // time since starting this game
-    current,       // the current piece
-    next,          // the next piece
-    score,         // the current score
-    vscore,        // the currently displayed score (it catches up to score in small chunks - like a spinning slot machine)
-    rows,          // number of completed rows in the current game
-    step;          // how long before current piece drops by 1 row
+let dx = 0;  // pixel width of a single trig
+let dy = 0;  // pixel height of a single trig
+
+let blocks = [];  // 2 dimensional array (nx*ny) representing tetris court - either empty block or occupied by a 'piece'
+let actions = [];  // queue of user actions (inputs)
+let playing = false;  // game is in progress
+let dt = 0;  // countdown to next step downward of the current piece
+let current = null;  // current piece
+let next = null;  // next piece
+let score = 0;  // current score (in reality)
+let vscore = 0;  // currently displayed score (it catches up in small chunks)
+let rows = 0;  // number of rows completed so far in this game
+let step = 0;  // how long before current piece drops by 1 row
 
 //-------------------------------------------------------------------------
 // tetris pieces
@@ -168,7 +170,7 @@ function resize(event) {
   ucanvas.height = ucanvas.clientHeight;
   dx = canvas.width  / nx; // pixel size of a single tetris block
   dy = canvas.height / ny; // (ditto)
-  invalidate();
+  invalidateCourt();
   invalidateNext();
 }
 
@@ -200,26 +202,25 @@ function lose() { show('start'); setVisualScore(); playing = false; }
 
 function setVisualScore(n)      { vscore = n || score; invalidateScore(); }
 function setScore(n)            { score = n; setVisualScore(n);  }
-function addScore(n)            { score = score + n;   }
-function clearScore()           { setScore(0); }
-function clearRows()            { setRows(0); }
+function addScore(n)            { score = score + n; }
 function setRows(n)             { rows = n; step = Math.max(speed.min, speed.start - (speed.decrement*rows)); invalidateRows(); }
 function addRows(n)             { setRows(rows + n); }
 function getBlock(x,y)          { return (blocks && blocks[x] ? blocks[x][y] : null); }
-function setBlock(x,y,type)     { blocks[x] = blocks[x] || []; blocks[x][y] = type; invalidate(); }
-function clearBlocks()          { blocks = []; invalidate(); }
+function setBlock(x,y,type)     { blocks[x] = blocks[x] || []; blocks[x][y] = type; invalidateCourt(); }
 function clearActions()         { actions = []; }
-function setCurrentPiece(piece) { current = piece; invalidate(); }
+function setCurrentPiece(piece) { current = piece; invalidateCourt(); }
 function setNextPiece(piece)    { next = piece; invalidateNext(); }
 
 function reset() {
   dt = 0;
   clearActions();
-  clearBlocks();
-  clearRows();
-  clearScore();
-  setCurrentPiece(next);
-  setNextPiece(randomPiece());
+  blocks = [];
+  setRows(0);
+  setScore(0);
+  current = next;
+  next = randomPiece();
+  invalidateCourt();
+  invalidateNext();
 }
 
 function update(idt) {
@@ -289,7 +290,7 @@ function rotate() {
   if (unoccupied(current.type, current.x, current.y + !current.halfstep, newdir)) {
     current.dir = newdir;
     current.halfstep = !current.halfstep;
-    invalidate();
+    invalidateCourt();
   }
 }
 
@@ -298,7 +299,7 @@ function drop() {
     // The piece moves down.
     current.y += 2 - current.halfstep;
     current.halfstep = false;
-    invalidate();
+    invalidateCourt();
   } else {
     // The piece has landed.
     console.assert(!current.halfstep);
@@ -307,8 +308,10 @@ function drop() {
       setBlock(x, y, current.type);
     });
     removeLines();
-    setCurrentPiece(next);
-    setNextPiece(randomPiece());
+    current = next;
+    next = randomPiece();
+    invalidateCourt();
+    invalidateNext();
     clearActions();
     if (occupied(current.type, current.x, current.y, current.dir)) {
       lose();
@@ -349,10 +352,10 @@ function removeLine(n) {
 
 var invalid = {};
 
-function invalidate()         { invalid.court  = true; }
-function invalidateNext()     { invalid.next   = true; }
-function invalidateScore()    { invalid.score  = true; }
-function invalidateRows()     { invalid.rows   = true; }
+function invalidateCourt() { invalid.court = true; }
+function invalidateNext() { invalid.next = true; }
+function invalidateScore() { invalid.score = true; }
+function invalidateRows() { invalid.rows = true; }
 
 function draw() {
   ctx.save();
