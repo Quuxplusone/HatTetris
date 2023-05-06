@@ -33,6 +33,7 @@ let score = 0;  // current score (in reality)
 let vscore = 0;  // currently displayed score (it catches up in small chunks)
 let rows = 0;  // number of rows completed so far in this game
 let step = 0;  // how long before current piece drops by 1 row
+let yCourtOffset = false;  // is there a completed row half-hidden at the bottom of the court
 
 //-------------------------------------------------------------------------
 // tetris pieces
@@ -150,7 +151,7 @@ function randomPiece() {
   if (x % 2 == 1) {
     x += 1;
   }
-  return { type: type, dir: 0, x: x, y: 0, halfstep: false };
+  return { type: type, dir: 0, x: x, y: yCourtOffset ? 1 : 0, halfstep: yCourtOffset };
 }
 
 
@@ -197,14 +198,10 @@ function keydown(ev) {
 // GAME LOGIC
 //-------------------------------------------------------------------------
 
-function play() { hide('start'); reset();          playing = true;  }
-function lose() { show('start'); setVisualScore(); playing = false; }
+function play() { hide('start'); reset();        playing = true;  }
+function lose() { show('start'); vscore = score; playing = false; }
 
-function setVisualScore(n)      { vscore = n || score; invalidateScore(); }
-function setScore(n)            { score = n; setVisualScore(n);  }
-function addScore(n)            { score = score + n; }
-function setRows(n)             { rows = n; step = Math.max(speed.min, speed.start - (speed.decrement*rows)); invalidateRows(); }
-function addRows(n)             { setRows(rows + n); }
+function addRows(n)             { rows += n; step = Math.max(speed.min, speed.start - (speed.decrement*rows)); }
 function getBlock(x,y)          { return (blocks && blocks[x] ? blocks[x][y] : null); }
 function setBlock(x,y,type)     { blocks[x] = blocks[x] || []; blocks[x][y] = type; invalidateCourt(); }
 function clearActions()         { actions = []; }
@@ -215,8 +212,14 @@ function reset() {
   dt = 0;
   clearActions();
   blocks = [];
-  setRows(0);
-  setScore(0);
+  for (let x = 0; x < nx; ++x) {
+    setBlock(x, ny, {color: 'gray'});
+  }
+  yCourtOffset = false;
+  rows = 0;
+  step = speed.start;
+  score = 0;
+  vscore = 0;
   current = next;
   next = randomPiece();
   invalidateCourt();
@@ -226,7 +229,7 @@ function reset() {
 function update(idt) {
   if (playing) {
     if (vscore < score) {
-      setVisualScore(vscore + 1);
+      vscore += 1;
     }
     handle(actions.shift());
     dt = dt + idt;
@@ -303,7 +306,7 @@ function drop() {
   } else {
     // The piece has landed.
     console.assert(!current.halfstep);
-    addScore(10);
+    score += 10;
     eachblock(current.type.blocks[current.dir], current.x, current.y, function(x, y) {
       setBlock(x, y, current.type);
     });
@@ -320,29 +323,57 @@ function drop() {
 }
 
 function removeLines() {
-  let n = 0;
-  for (let y = ny ; y > 0 ; --y) {
+  let linesToRemove = [];
+  for (let y = 0; y < ny; ++y) {
     let complete = true;
-    for (let x = 0 ; x < nx ; ++x) {
-      if (!getBlock(x, y))
+    for (let x = 0; x < nx; ++x) {
+      if (!getBlock(x, y)) {
         complete = false;
+      }
     }
     if (complete) {
-      removeLine(y);
-      y = y + 1; // recheck same line
-      n++;
+      linesToRemove.push(y);
     }
   }
-  if (n > 0) {
-    addRows(n);
-    addScore(100*Math.pow(2,n-1)); // 1: 100, 2: 200, 3: 400, 4: 800
-  }
-}
 
-function removeLine(n) {
-  for (let y = n ; y >= 0 ; --y) {
-    for (let x = 0 ; x < nx ; ++x)
-      setBlock(x, y, (y == 0) ? null : getBlock(x, y-1));
+  let removalsMade = 0;
+  while (linesToRemove.length) {
+    let yy = linesToRemove.shift();
+    if (yy == ny-1 && !yCourtOffset) {
+      // Hide the bottom row!
+      // But if we've already hidden it, then you don't
+      // get anything until you've completed row ny-2,
+      // in which case you'd have fallen into the
+      // `else if` below on the previous loop iteration.
+      removalsMade += 1;
+      yCourtOffset = true;
+    } else if (yy == ny-2 && linesToRemove[0] == ny-1) {
+      linesToRemove.shift();
+      // Slide everything down by 2.
+      for (let y = ny; y >= 1; --y) {
+        for (let x = 0; x < nx; ++x) {
+          setBlock(x, y, getBlock(x, y-2));
+        }
+      }
+      removalsMade += 1;
+      yCourtOffset = false;
+    } else if (linesToRemove[0] == yy+1) {
+      linesToRemove.shift();
+      // Slide everything down by 2.
+      for (let y = yy+1; y >= 1; --y) {
+        for (let x = 0; x < nx; ++x) {
+          setBlock(x, y, getBlock(x, y-2));
+        }
+      }
+      removalsMade += 1;
+    } else {
+      // do nothing
+    }
+  }
+
+  if (removalsMade >= 1) {
+    addRows(removalsMade);
+    score += 100*Math.pow(2, removalsMade-1); // 1: 100, 2: 200, 3: 400, 4: 800
   }
 }
 
@@ -354,8 +385,6 @@ var invalid = {};
 
 function invalidateCourt() { invalid.court = true; }
 function invalidateNext() { invalid.next = true; }
-function invalidateScore() { invalid.score = true; }
-function invalidateRows() { invalid.rows = true; }
 
 function draw() {
   ctx.save();
@@ -363,57 +392,44 @@ function draw() {
   ctx.translate(0.5, 0.5); // for crisp 1px black lines
   drawCourt();
   drawNext();
-  drawScore();
-  drawRows();
+  html('score', ("00000" + Math.floor(vscore)).slice(-5));
+  html('rows', rows);
   ctx.restore();
 }
 
 function drawCourt() {
   if (invalid.court) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    // Draw the bottom edge of the playing field.
-    drawCourtBottom(ctx, 'gray');
     if (playing) {
-      drawPiece(ctx, current);
+      drawCurrentPiece(ctx);
     }
-    for (let y = 0; y < ny; ++y) {
+    for (let y = 0; y <= ny; ++y) {
       for (let x = 0; x < nx; ++x) {
         let block = getBlock(x,y);
         if (block) {
-          drawTrig(ctx, x, y, block.color, false);
+          drawTrig(ctx, x, y + yCourtOffset, block.color, yCourtOffset);
         }
       }
     }
     ctx.strokeRect(0, 0, nx*dx - 1, ny*dy - 1); // court boundary
-    invalid.court = false;
   }
+  invalid.court = false;
 }
 
 function drawNext() {
   if (invalid.next) {
     uctx.clearRect(0, 0, uctx.canvas.width, uctx.canvas.height);
-    drawPiece(uctx, { type: next.type, x: 0, y: 0, dir: 0, halfstep: false });
-    invalid.next = false;
+    eachblock(next.type.blocks[0], 0, 0, function(x, y) {
+      drawTrig(uctx, x, y, next.type.color, false);
+    });
   }
+  invalid.next = false;
 }
 
-function drawScore() {
-  if (invalid.score) {
-    html('score', ("00000" + Math.floor(vscore)).slice(-5));
-    invalid.score = false;
-  }
-}
-
-function drawRows() {
-  if (invalid.rows) {
-    html('rows', rows);
-    invalid.rows = false;
-  }
-}
-
-function drawPiece(ctx, p) {
+function drawCurrentPiece(ctx) {
+  let p = current;
   eachblock(p.type.blocks[p.dir], p.x, p.y, function(x, y) {
-    drawTrig(ctx, x, y, p.type.color, p.halfstep);
+    drawTrig(ctx, x, y - yCourtOffset, p.type.color, p.halfstep != yCourtOffset);
   });
 }
 
@@ -431,19 +447,6 @@ function drawTrig(ctx, x, y, color, halfstep) {
     ctx.lineTo(x*dx, y*dy + dy);
     ctx.lineTo(x*dx, y*dy - dy);
   }
-  ctx.closePath();
-  ctx.stroke();
-  ctx.fill();
-}
-
-function drawCourtBottom(ctx, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(0, ny*dy);
-  for (let x = 1; x < nx; ++x) {
-    ctx.lineTo(x*dx, ny*dy - (x % 2) * dy);
-  }
-  ctx.lineTo(nx*dx, ny*dy);
   ctx.closePath();
   ctx.stroke();
   ctx.fill();
