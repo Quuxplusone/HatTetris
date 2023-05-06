@@ -106,27 +106,27 @@ function randomPiece() {
   if (pieces.length == 0) {
     let i = { size: 4, color: 'cyan', blocks: [
         '...X....X....X....X....X.',
-        '.XX....XX....X...........',
-        '........XX..XX...X.......',
-        '...X....X....X....X....X.',
+        '...X...XX..XX............',
         '.......X....XX....XX.....',
-        '.........X...XX..XX......',
+        '...X....X....X....X....X.',
+        '........XX..XX...X.......',
+        '.XX....XX....X...........',
     ]};
     let j = { size: 4, color: 'blue', blocks: [
         '..X....X....X...XX.......',
-        '..X....XX....X....X......',
-        '......XX..XXX............',
-        '.......XX...X....X....X..',
-        '......X....X....XX....X..',
         '............XXX..XX......',
+        '......X....X....XX....X..',
+        '.......XX...X....X....X..',
+        '......XX..XXX............',
+        '......X....XX....X....X..',
     ]};
     let l = { size: 4, color: 'orange', blocks: [
         '...X....X....X....XX.....',
-        '.................XXX...XX',
-        '.........X....X...XX...X.',
-        '.......XX....X....X....X.',
-        '............XX...XXX.....',
         '...X...XX...X....X.......',
+        '............XX...XXX.....',
+        '.......XX....X....X....X.',
+        '.........X....X...XX...X.',
+        '.................XXX...XX',
     ]};
     let o = { size: 2, color: 'yellow', blocks: [
         '.......X....XX...X.......',
@@ -136,18 +136,32 @@ function randomPiece() {
         '.......X....XX...X.......',
         '.......X...XX....X.......',
     ]};
-    let s = { size: 4, blocks: [], color: 'green' };
-    let t = { size: 4, color: 'purple', blocks: [
-        '......XX....X....X....X..',
-        '........X....X...XX...X..',
-        '......XXX...XX...........',
-        '..X....X....X....XX......',
-        '..X...XX...X....X........',
-        '.XX...XXX................',
+    let s = { size: 4, color: 'green', blocks: [
+        '.....XX...XX....X........',
+        '.X....X....XX...X........',
+        '......XX..XX....X........',
+        'X....XX...XX.............',
+        '......X...XX....X....X...',
+        '......X....XX..XX........',
     ]};
-    let z = { size: 2, blocks: [0x0660, 0x0446, 0x6440, 0x0660, 0x6220, 0x0226], color: 'red' };
+    let t = { size: 4, color: 'purple', blocks: [
+        '.....XX...XX....XX.......',
+        '.X....X....XX...X....X...',
+        '......XX..XX...XX........',
+        '.XX....XX...XX...........',
+        '.X....X...XX....X....X...',
+        '......XX...XX..XX........',
+    ]};
+    let z = { size: 4, color: 'red', blocks: [
+        '......X...XX....XX.......',
+        '......X....XX...X....X...',
+        '......X...XX...XX........',
+        '.....XX....XX...X........',
+        '.X....X...XX....X........',
+        '......XX...XX...X........',
+    ]};
 
-    pieces = [i,i,i,j,j,j,l,l,l,o,o,o];
+    pieces = [i,i,i,j,j,j,l,l,l,o,o,o,s,s,s,z,z,z];
   }
   let type = pieces.splice(random(0, pieces.length-1), 1)[0];
   let x = 2;
@@ -245,7 +259,9 @@ function update(idt) {
       vscore += 1;
     }
     if (!removalAnimationIsHappening) {
-      handle(actions.shift());
+      if (actions.length) {
+        handle(actions.shift());
+      }
       dt = dt + idt;
       if (dt > step) {
         dt = dt - step;
@@ -263,6 +279,7 @@ function handle(action) {
       if (unoccupied(current.type, x-1, y, current.dir)) {
         current.x -= 1;
         current.halfstep = false;
+        invalidateCourt();
       }
     } else {
       if (occupied(current.type, x-1, y+1, current.dir)) {
@@ -271,10 +288,12 @@ function handle(action) {
         // plenty of room; go left and halfstep
         current.x -= 1;
         current.halfstep = true;
+        invalidateCourt();
       } else {
         // go left and down
         current.x -= 1;
         current.y += 1;
+        invalidateCourt();
       }
     }
   } else if (action == 'right') {
@@ -282,6 +301,7 @@ function handle(action) {
       if (unoccupied(current.type, x+1, y, current.dir)) {
         current.x += 1;
         current.halfstep = false;
+        invalidateCourt();
       }
     } else {
       if (occupied(current.type, x+1, y+1, current.dir)) {
@@ -290,15 +310,19 @@ function handle(action) {
         // plenty of room; go right and halfstep
         current.x += 1;
         current.halfstep = true;
+        invalidateCourt();
       } else {
         // go right and down
         current.x += 1;
         current.y += 1;
+        invalidateCourt();
       }
     }
   } else if (action == 'drop') {
+    invalidateCourt();
     drop();
   } else if (action == 'rotate') {
+    invalidateCourt();
     rotate();
   }
 }
@@ -384,15 +408,18 @@ function reallyDestroyLines(linesToRemove) {
       // `else if` below on the previous loop iteration.
       removalsMade += 1;
       yCourtOffset = true;
+      for (let x = 0; x < nx; ++x) {
+        setBlock(x, ny-1, {color: 'gray'});
+      }
     } else if (yy == ny-2 && linesToRemove[0] == ny-1) {
       linesToRemove.shift();
       // Slide everything down by 2.
-      for (let y = ny; y >= 1; --y) {
+      for (let y = ny-1; y >= 1; --y) {
         for (let x = 0; x < nx; ++x) {
           setBlock(x, y, getBlock(x, y-2));
         }
       }
-      removalsMade += 1;
+      removalsMade += (yCourtOffset ? 1 : 2);
       yCourtOffset = false;
     } else if (linesToRemove[0] == yy+1) {
       linesToRemove.shift();
@@ -402,15 +429,17 @@ function reallyDestroyLines(linesToRemove) {
           setBlock(x, y, getBlock(x, y-2));
         }
       }
-      removalsMade += 1;
+      removalsMade += 2;
     } else {
       // do nothing
     }
   }
 
   if (removalsMade >= 1) {
+    console.assert(removalsMade <= 5); // with an "i" block
     addRows(removalsMade);
-    score += 100*Math.pow(2, removalsMade-1); // 1: 100, 2: 200, 3: 400, 4: 800
+    let pointsPerLine = [0, 100, 300, 600, 1000, 1500];
+    score += pointsPerLine[removalsMade];
   }
 }
 
@@ -445,7 +474,9 @@ function drawCourt() {
         let block = getBlock(x,y);
         if (block) {
           let color = block.color;
-          if (removalAnimationIsHappening && removalAnimationLines.includes(y)) {
+          if (y == ny - yCourtOffset) {
+            color = 'gray';  // never flash the bottom half-line
+          } else if (removalAnimationIsHappening && removalAnimationLines.includes(y)) {
             color = (removalAnimationIsHappening % 2) ? 'black' : 'white';
           }
           drawTrig(ctx, x, y + yCourtOffset, color, yCourtOffset);
@@ -507,7 +538,7 @@ window.onload = function () {
     update(Math.min(1, (now - last) / 1000.0));
     draw();
     last = now;
-    requestAnimationFrame(frame, canvas);
+    window.requestAnimationFrame(frame);
   }
 
   resize(); // setup all our sizing information
