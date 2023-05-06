@@ -23,6 +23,9 @@ let nu      = 5;  // width/height of upcoming preview (in blocks)
 let dx = 0;  // pixel width of a single trig
 let dy = 0;  // pixel height of a single trig
 
+let removalAnimationIsHappening = 0;
+let removalAnimationLines = [];
+
 let blocks = [];  // 2 dimensional array (nx*ny) representing tetris court - either empty block or occupied by a 'piece'
 let actions = [];  // queue of user actions (inputs)
 let playing = false;  // game is in progress
@@ -227,15 +230,27 @@ function reset() {
 }
 
 function update(idt) {
+  if (removalAnimationIsHappening) {
+    removalAnimationIsHappening += 1;
+    invalid.court = true;
+    drawCourt();
+    if (removalAnimationIsHappening == 20) {
+      reallyDestroyLines(removalAnimationLines);
+      removalAnimationIsHappening = 0;
+    }
+  }
+
   if (playing) {
     if (vscore < score) {
       vscore += 1;
     }
-    handle(actions.shift());
-    dt = dt + idt;
-    if (dt > step) {
-      dt = dt - step;
-      drop();
+    if (!removalAnimationIsHappening) {
+      handle(actions.shift());
+      dt = dt + idt;
+      if (dt > step) {
+        dt = dt - step;
+        drop();
+      }
     }
   }
 }
@@ -323,7 +338,7 @@ function drop() {
 }
 
 function removeLines() {
-  let linesToRemove = [];
+  let completedLines = [];
   for (let y = 0; y < ny; ++y) {
     let complete = true;
     for (let x = 0; x < nx; ++x) {
@@ -332,10 +347,32 @@ function removeLines() {
       }
     }
     if (complete) {
-      linesToRemove.push(y);
+      completedLines.push(y);
     }
   }
 
+  let linesToRemove = [];
+  while (completedLines.length) {
+    let yy = completedLines.shift();
+    if (yy == ny-1 && !yCourtOffset) {
+      linesToRemove.push(yy);
+    } else if (completedLines[0] == yy+1) {
+      linesToRemove.push(yy);
+      linesToRemove.push(yy+1);
+      completedLines.shift();
+    } else {
+      // this completed line won't actually be removed
+    }
+  }
+
+  if (linesToRemove.length) {
+    // Flash the removed rows.
+    removalAnimationIsHappening = 1;
+    removalAnimationLines = linesToRemove;
+  }
+}
+
+function reallyDestroyLines(linesToRemove) {
   let removalsMade = 0;
   while (linesToRemove.length) {
     let yy = linesToRemove.shift();
@@ -407,7 +444,11 @@ function drawCourt() {
       for (let x = 0; x < nx; ++x) {
         let block = getBlock(x,y);
         if (block) {
-          drawTrig(ctx, x, y + yCourtOffset, block.color, yCourtOffset);
+          let color = block.color;
+          if (removalAnimationIsHappening && removalAnimationLines.includes(y)) {
+            color = (removalAnimationIsHappening % 2) ? 'black' : 'white';
+          }
+          drawTrig(ctx, x, y + yCourtOffset, color, yCourtOffset);
         }
       }
     }
